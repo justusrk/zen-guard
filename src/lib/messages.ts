@@ -1,0 +1,50 @@
+export const inspiringMessages: string[] = [
+  
+  "Getting started is the trick. Momentum does the rest.",
+  "Protect the first 10 minutes. Focus usually follows.",
+  "Work expands when time is loose. Keep it time-bound.",
+  "Treat work time as sacred so rest can be guilt-free.",
+  "You don’t need motivation. You need fewer decisions.",
+  "One small action is enough to restart momentum.",
+  "Finish the block. Then decide what’s next.",
+  "Attention is limited. Spend it intentionally.",
+  "Distraction feels like relief, but it steals recovery.",
+  "Do the next concrete step, not the whole task.",
+
+  "Depth comes after resistance, not before it.",
+  "Short focus now beats long regret later.",
+  "Clarity often arrives after you begin, not before.",
+  "Create progress you can point to, even if it’s small.",
+  "Consistency beats intensity you can’t repeat.",
+
+  "Learn from the ant: no pressure, just steady effort.",
+  "The ant works without urgency, yet finishes on time.",
+  "No one pushes the ant. Discipline replaces supervision.",
+  "The ant prepares early so stress stays low.",
+  "The ant doesn’t rush—yet it never waits.",
+  "Quiet consistency beats dramatic bursts.",
+  "The ant focuses on today’s load, not the whole season.",
+  "No motivation speeches. Just movement.",
+  "The ant works while conditions are good.",
+  "Progress compounds when excuses are absent.",
+
+  "Silence is doing part of the work for you.",
+  "You don’t need more time—just protected time.",
+  "This block is an investment in future ease.",
+  "Steady work now prevents panic later.",
+  "High-quality rest starts with high-quality focus.",
+
+  "Willpower is fragile. Environment is reliable.",
+  "Remove the trigger, not the temptation.",
+  "Design the space so focus is the default.",
+  "If it’s visible, it’s pulling attention.",
+  "Friction beats self-control every time.",
+  "Silence the environment; the mind will follow.",
+  "Make distractions harder, not forbidden.",
+  "Good focus is often just good setup.",
+  "Out of sight is out of mind—for now.",
+  "Protect the room before protecting the mind.",
+  "Focus improves when options are fewer.",
+  "A calm workspace does half the work."
+
+];
