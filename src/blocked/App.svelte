@@ -87,7 +87,7 @@
     <div class="info-section">
       {#if activeSession}
         <div class="session-info">
-          <span class="session-label">Session:</span>
+          <span class="session-label">Zen Window:</span>
           <span class="session-name">{activeSession.name}</span>
           {#if timeRemaining}
             <span class="time-remaining">({timeRemaining} remaining)</span>
