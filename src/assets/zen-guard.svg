@@ -1,0 +1,42 @@
+<svg
+  width="128"
+  height="128"
+  viewBox="0 0 128 128"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <!-- Shield -->
+  <path
+    d="M64 8
+       L104 24
+       V56
+       C104 82 84 102 64 112
+       C44 102 24 82 24 56
+       V24
+       L64 8Z"
+    fill="#1F2937"
+  />
+
+  <!-- Inner shield -->
+  <path
+    d="M64 18
+       L94 30
+       V55
+       C94 75 79 91 64 99
+       C49 91 34 75 34 55
+       V30
+       L64 18Z"
+    fill="#FFFFFF"
+    opacity="0.95"
+  />
+
+  <!-- Focus / block line -->
+  <rect
+    x="60"
+    y="36"
+    width="8"
+    height="44"
+    rx="4"
+    fill="#1F2937"
+  />
+</svg>
