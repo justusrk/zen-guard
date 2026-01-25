@@ -83,8 +83,8 @@
   }
 </script>
 
-<div class="modal-overlay" onclick={onCancel} role="presentation">
-  <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog">
+<div class="modal-overlay" onclick={onCancel} onkeydown={(e) => e.key === 'Escape' && onCancel()} role="presentation">
+  <div class="modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <h2>{initialSnapshot ? 'Edit Zen Window' : 'New Zen Window'}</h2>
 
     <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
@@ -110,8 +110,8 @@
         </div>
       </div>
 
-      <div class="form-group">
-        <label>Days of Week</label>
+      <div class="form-group" role="group" aria-labelledby="days-label">
+        <span id="days-label" class="label">Days of Week</span>
         <div class="quick-select">
           <button type="button" onclick={selectWeekdays}>Weekdays</button>
           <button type="button" onclick={selectWeekends}>Weekends</button>
@@ -195,7 +195,8 @@
     flex: 1;
   }
 
-  label {
+  label,
+  .label {
     display: block;
     margin-bottom: 0.375rem;
     font-size: 0.875rem;

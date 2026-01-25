@@ -147,8 +147,8 @@
   }
 </script>
 
-<div class="modal-overlay" onclick={onCancel} role="presentation">
-  <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+<div class="modal-overlay" onclick={onCancel} onkeydown={(e) => e.key === 'Escape' && onCancel()} role="presentation">
+  <div class="modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <h2>{initialSnapshot ? 'Edit Rule' : 'New Rule'}</h2>
 
     <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
@@ -176,13 +176,14 @@
 
       {#if isListType}
         <div class="form-group">
-          <label>
+          <label for="new-item">
             {#if isUrlType}URLs / Domains{:else}Channel Names{/if}
           </label>
 
           <div class="item-input-row">
             <input
               type="text"
+              id="new-item"
               bind:value={newItem}
               placeholder={itemPlaceholder()}
               onkeydown={handleKeydown}
@@ -195,7 +196,7 @@
               {#each values as item, index}
                 <li class="item">
                   <span class="item-text">{item}</span>
-                  <button type="button" class="remove-item-btn" onclick={() => removeItem(index)}>
+                  <button type="button" class="remove-item-btn" onclick={() => removeItem(index)} title="Remove item">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="18" y1="6" x2="6" y2="18"/>
                       <line x1="6" y1="6" x2="18" y2="18"/>
@@ -229,8 +230,8 @@
           {/if}
         </div>
 
-        <div class="form-group">
-          <label>Search in</label>
+        <div class="form-group" role="group" aria-labelledby="search-in-label">
+          <span id="search-in-label" class="label">Search in</span>
           <div class="search-locations">
             <label class="checkbox-label">
               <input type="checkbox" bind:checked={searchInUrl} />
@@ -311,7 +312,8 @@
     margin-bottom: 1rem;
   }
 
-  label {
+  label,
+  .label {
     display: block;
     margin-bottom: 0.375rem;
     font-size: 0.875rem;

@@ -97,7 +97,7 @@
     }
   }
 
-  let motivationFileInput: HTMLInputElement | null = null
+  let motivationFileInput = $state<HTMLInputElement | null>(null)
 
   function exportMotivationMessages() {
     const data = {

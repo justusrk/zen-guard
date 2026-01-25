@@ -20,8 +20,8 @@
   }: Props = $props()
 </script>
 
-<div class="modal-overlay" onclick={onCancel} role="presentation">
-  <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog">
+<div class="modal-overlay" onclick={onCancel} onkeydown={(e) => e.key === 'Escape' && onCancel()} role="presentation">
+  <div class="modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <h2>{title}</h2>
     <p class="message">{message}</p>
     <div class="actions">
