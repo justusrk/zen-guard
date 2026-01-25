@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zen Guard - Website Blocker for Focus</title>
+  <meta name="description" content="Take control of your browsing. Block distracting websites during focus hours with Zen Guard for Chrome.">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #fafafa;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    header {
+      padding: 40px 0;
+      text-align: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .logo {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+
+    .tagline {
+      font-size: 1.2rem;
+      opacity: 0.9;
+    }
+
+    .cta {
+      display: inline-block;
+      margin-top: 30px;
+      padding: 15px 40px;
+      background: white;
+      color: #667eea;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1.1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    main {
+      padding: 60px 0;
+    }
+
+    .features {
+      display: grid;
+      gap: 30px;
+    }
+
+    .feature {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .feature h3 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 1.2rem;
+    }
+
+    .feature p {
+      color: #555;
+    }
+
+    .how-it-works {
+      margin-top: 60px;
+      padding: 40px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .how-it-works h2 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #333;
+    }
+
+    .how-it-works ol {
+      padding-left: 20px;
+    }
+
+    .how-it-works li {
+      margin-bottom: 15px;
+      color: #555;
+    }
+
+    footer {
+      padding: 40px 0;
+      text-align: center;
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-links {
+      margin-bottom: 15px;
+    }
+
+    .footer-links a {
+      margin: 0 15px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <img src="logo.png" alt="Zen Guard" class="logo">
+      <h1>Zen Guard</h1>
+      <p class="tagline">Take control of your browsing. Stay focused.</p>
+      <a href="#" class="cta">Add to Chrome</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="features">
+      <div class="feature">
+        <h3>Zen Windows</h3>
+        <p>Create time-based blocking schedules with custom start and end times for each day of the week. Block distractions only when you need to focus.</p>
+      </div>
+
+      <div class="feature">
+        <h3>Global Rules</h3>
+        <p>Set rules that apply at all times, regardless of your active Zen Window. Perfect for sites you never want to visit.</p>
+      </div>
+
+      <div class="feature">
+        <h3>Flexible Blocking</h3>
+        <p>Block by exact URL, domain, or keywords found in URLs, page headings, and content. Even block specific YouTube channels.</p>
+      </div>
+
+      <div class="feature">
+        <h3>Custom Messages</h3>
+        <p>Display your own motivational messages when a page is blocked. Remind yourself why you're staying focused.</p>
+      </div>
+
+      <div class="feature">
+        <h3>Track Your Progress</h3>
+        <p>See weekly stats on how many distractions were blocked. Celebrate your focus wins.</p>
+      </div>
+
+      <div class="feature">
+        <h3>Import & Export</h3>
+        <p>Backup and restore your configuration. Share your blocking rules across devices.</p>
+      </div>
+    </div>
+
+    <div class="how-it-works">
+      <h2>How It Works</h2>
+      <ol>
+        <li><strong>Create a Zen Window</strong> with your focus hours (e.g., 9am-5pm on weekdays)</li>
+        <li><strong>Add rules</strong> to block distracting sites like social media and news</li>
+        <li><strong>Stay focused</strong> - when you try to visit a blocked site, you'll see your custom message</li>
+        <li><strong>Use Global Rules</strong> for sites you want blocked at all times</li>
+      </ol>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="https://github.com/user/zen-guard">GitHub</a>
+      </div>
+      <p>Zen Guard is free and open source.</p>
+    </div>
+  </footer>
+</body>
+</html>
