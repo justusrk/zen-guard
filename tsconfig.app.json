@@ -6,6 +6,7 @@
     "useDefineForClassFields": true,
     "baseUrl": ".",
     "module": "ESNext",
+    "types": ["svelte", "vite/client"],
     "paths": {
       "@/*": ["src/*"]
     },

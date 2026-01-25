@@ -21,6 +21,14 @@ A Chrome browser extension for website blocking and focus management. Take contr
 3. When you try to visit a blocked site during your Zen Window, you'll see a block page with your custom message
 4. Use **Global Rules** for sites you want blocked at all times
 
+## Pro Tip
+
+Allow the extension in Incognito/Private mode to prevent bypassing your blocking rules:
+
+1. Go to `chrome://extensions/`
+2. Find **Zen Guard** and click **Details**
+3. Enable **Allow in Incognito**
+
 ---
 
 ## Development
