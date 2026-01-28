@@ -27,7 +27,6 @@ export default defineManifest({
     'storage',
     'webNavigation',
     'alarms',
-    'activeTab',
     'sidePanel',
   ],
   host_permissions: ['<all_urls>'],
