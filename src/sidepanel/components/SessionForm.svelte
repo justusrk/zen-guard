@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Session, Rule } from '@/lib/types'
+  import type { OverrideSettings, Session, Rule } from '@/lib/types'
 
   interface Props {
     session: Session | null
@@ -14,7 +14,12 @@
   const initialSnapshot = session ? $state.snapshot(session) : null
   const initialId = initialSnapshot?.id
   const initialEnabled = initialSnapshot?.enabled ?? true
-  const initialRules: Rule[] = initialSnapshot?.rules ?? []
+  const initialRules: Rule[] = Array.isArray(initialSnapshot?.rules)
+    ? initialSnapshot.rules.map(rule => ({
+      ...rule,
+      values: Array.isArray(rule.values) ? [...rule.values] : []
+    }))
+    : []
   const initialOrder = initialSnapshot?.order
 
   let name = $state(initialSnapshot?.name ?? '')
@@ -22,7 +27,17 @@
   let endTime = $state(initialSnapshot?.endTime ?? '17:00')
   let daysOfWeek = $state<number[]>(initialSnapshot?.daysOfWeek ? [...initialSnapshot.daysOfWeek] : [1, 2, 3, 4, 5])
   let message = $state(initialSnapshot?.message ?? '')
+  let hasCustomOverrideSettings = $state(Boolean(initialSnapshot?.overrideSettings))
+  let overrideEnabled = $state(initialSnapshot?.overrideSettings?.enabled ?? true)
+  let maxOverrideMinutes = $state(initialSnapshot?.overrideSettings?.maxOverrideMinutes ?? 15)
+  let resetIntervalMinutes = $state(initialSnapshot?.overrideSettings?.resetIntervalMinutes ?? 1440)
+  let requireCountdown = $state(initialSnapshot?.overrideSettings?.requireCountdown ?? true)
+  let requireQuoteCompletion = $state(initialSnapshot?.overrideSettings?.requireQuoteCompletion ?? true)
   let error = $state('')
+  const resetIntervalPresets = [300, 720, 1440]
+  let resetIntervalMode = $state<'300' | '720' | '1440' | 'custom'>(
+    resetIntervalPresets.includes(resetIntervalMinutes) ? String(resetIntervalMinutes) as '300' | '720' | '1440' : 'custom'
+  )
 
   const dayOptions = [
     { value: 0, label: 'Sun' },
@@ -55,6 +70,28 @@
       return
     }
 
+    if (hasCustomOverrideSettings) {
+      if (!Number.isFinite(maxOverrideMinutes) || maxOverrideMinutes <= 0) {
+        error = 'Temporary unblock minutes must be greater than 0'
+        return
+      }
+
+      if (!Number.isFinite(resetIntervalMinutes) || resetIntervalMinutes <= 0) {
+        error = 'Reset interval must be greater than 0'
+        return
+      }
+    }
+
+    const overrideSettings: OverrideSettings | undefined = hasCustomOverrideSettings
+      ? {
+          enabled: overrideEnabled,
+          maxOverrideMinutes: Math.floor(maxOverrideMinutes),
+          resetIntervalMinutes: Math.floor(resetIntervalMinutes),
+          requireCountdown,
+          requireQuoteCompletion
+        }
+      : undefined
+
     const newSession = {
       id: initialId,
       name: name.trim(),
@@ -64,7 +101,8 @@
       enabled: initialEnabled,
       rules: initialRules,
       message: message.trim(),
-      order: initialOrder
+      order: initialOrder,
+      overrideSettings
     }
 
     onSave(newSession)
@@ -80,6 +118,16 @@
 
   function selectAllDays() {
     daysOfWeek = [0, 1, 2, 3, 4, 5, 6]
+  }
+
+  function handleResetIntervalModeChange(value: string) {
+    if (value === '300' || value === '720' || value === '1440') {
+      resetIntervalMode = value
+      resetIntervalMinutes = Number(value)
+      return
+    }
+
+    resetIntervalMode = 'custom'
   }
 </script>
 
@@ -142,6 +190,62 @@
         <p class="hint">This message will be displayed if no rule-specific message is set</p>
       </div>
 
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" bind:checked={hasCustomOverrideSettings} />
+          <span>Use Zen Window temporary unblock settings</span>
+        </label>
+        <p class="hint">Leave off to inherit from global defaults</p>
+      </div>
+
+      {#if hasCustomOverrideSettings}
+        <div class="override-panel">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={overrideEnabled} />
+            <span>Enable temporary unblock requests for this Zen Window</span>
+          </label>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="max-override-minutes">Max Unblock Minutes</label>
+              <input type="number" id="max-override-minutes" bind:value={maxOverrideMinutes} min="1" step="1" />
+            </div>
+
+            <div class="form-group">
+              <label for="reset-interval-mode">Reset Interval</label>
+              <select
+                id="reset-interval-mode"
+                value={resetIntervalMode}
+                onchange={(event) => handleResetIntervalModeChange((event.currentTarget as HTMLSelectElement).value)}
+              >
+                <option value="300">Every 5 hours</option>
+                <option value="720">Every 12 hours</option>
+                <option value="1440">Every 24 hours</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+          </div>
+
+          {#if resetIntervalMode === 'custom'}
+            <div class="form-group">
+              <label for="custom-reset-interval">Custom Reset Minutes</label>
+              <input type="number" id="custom-reset-interval" bind:value={resetIntervalMinutes} min="1" step="1" />
+            </div>
+          {/if}
+
+          <div class="override-options">
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={requireCountdown} />
+              <span>Require 10-second countdown</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={requireQuoteCompletion} />
+              <span>Require quote typing</span>
+            </label>
+          </div>
+        </div>
+      {/if}
+
       {#if error}
         <p class="error">{error}</p>
       {/if}
@@ -186,6 +290,10 @@
     margin-bottom: 1rem;
   }
 
+  .checkbox-group {
+    margin-top: 0.5rem;
+  }
+
   .form-row {
     display: flex;
     gap: 1rem;
@@ -205,7 +313,9 @@
   }
 
   input[type="text"],
+  input[type="number"],
   input[type="time"],
+  select,
   textarea {
     width: 100%;
     padding: 0.5rem 0.75rem;
@@ -230,6 +340,33 @@
     margin: 0.375rem 0 0;
     font-size: 0.75rem;
     color: #6b7280;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: normal;
+  }
+
+  .checkbox-label input {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .override-panel {
+    margin-bottom: 1rem;
+    padding: 0.875rem;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+  }
+
+  .override-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .quick-select {

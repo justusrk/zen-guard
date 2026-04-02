@@ -1,4 +1,4 @@
-import type { Session, Rule, Stats, StorageData, BlockEvent, Settings } from './types'
+import type { Session, Rule, Stats, StorageData, BlockEvent, Settings, OverrideSettings, OverrideUsage } from './types'
 
 type LockManagerLike = {
   request<T>(name: string, callback: () => Promise<T>): Promise<T>
@@ -53,12 +53,13 @@ async function withStorageLock<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 async function getStorageData(): Promise<StorageData> {
-  const result = await chrome.storage.local.get(['sessions', 'globalRules', 'stats', 'settings'])
+  const result = await chrome.storage.local.get(['sessions', 'globalRules', 'stats', 'settings', 'overrideUsage'])
   return {
     sessions: Array.isArray(result.sessions) ? result.sessions : [],
     globalRules: Array.isArray(result.globalRules) ? result.globalRules : [],
     stats: (result.stats && typeof result.stats === 'object') ? result.stats as Stats : createDefaultStats(),
-    settings: (result.settings && typeof result.settings === 'object') ? result.settings as Settings : {}
+    settings: (result.settings && typeof result.settings === 'object') ? result.settings as Settings : {},
+    overrideUsage: Array.isArray(result.overrideUsage) ? result.overrideUsage as OverrideUsage[] : []
   }
 }
 
@@ -77,6 +78,89 @@ function normalizeMotivationMessages(messages: unknown): string[] {
     .filter((message): message is string => typeof message === 'string')
     .map(message => message.trim())
     .filter(Boolean)
+}
+
+function normalizePositiveNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined
+  }
+
+  const normalized = Math.floor(value)
+  return normalized > 0 ? normalized : undefined
+}
+
+function normalizeOverrideSettings(settings: unknown): OverrideSettings | undefined {
+  if (!settings || typeof settings !== 'object') {
+    return undefined
+  }
+
+  const raw = settings as Partial<OverrideSettings>
+  const maxOverrideMinutes = normalizePositiveNumber(raw.maxOverrideMinutes)
+  const resetIntervalMinutes = normalizePositiveNumber(raw.resetIntervalMinutes)
+
+  if (typeof raw.enabled !== 'boolean' || maxOverrideMinutes === undefined || resetIntervalMinutes === undefined) {
+    return undefined
+  }
+
+  return {
+    enabled: raw.enabled,
+    maxOverrideMinutes,
+    resetIntervalMinutes,
+    requireCountdown: raw.requireCountdown ?? false,
+    requireQuoteCompletion: raw.requireQuoteCompletion ?? false
+  }
+}
+
+function cloneOverrideSettingsForStorage(settings: OverrideSettings | undefined): OverrideSettings | undefined {
+  const normalized = normalizeOverrideSettings(settings)
+  return normalized ? { ...normalized } : undefined
+}
+
+function normalizeOverrideUsageEntry(entry: unknown): OverrideUsage | null {
+  if (!entry || typeof entry !== 'object') {
+    return null
+  }
+
+  const raw = entry as Partial<OverrideUsage>
+  if (typeof raw.ruleId !== 'string' || !raw.ruleId) {
+    return null
+  }
+
+  const windowStartedAt = typeof raw.windowStartedAt === 'number' && Number.isFinite(raw.windowStartedAt)
+    ? raw.windowStartedAt
+    : null
+  const usedMinutes = normalizePositiveNumber(raw.usedMinutes) ?? (raw.usedMinutes === 0 ? 0 : undefined)
+  const activeUntil = typeof raw.activeUntil === 'number' && Number.isFinite(raw.activeUntil)
+    ? raw.activeUntil
+    : undefined
+
+  if (windowStartedAt === null || usedMinutes === undefined) {
+    return null
+  }
+
+  return {
+    ruleId: raw.ruleId,
+    windowStartedAt,
+    usedMinutes,
+    activeUntil
+  }
+}
+
+function normalizeOverrideUsageEntries(entries: unknown): OverrideUsage[] {
+  if (!Array.isArray(entries)) {
+    return []
+  }
+
+  const normalized = entries
+    .map(normalizeOverrideUsageEntry)
+    .filter((entry): entry is OverrideUsage => entry !== null)
+
+  const latestByRuleId = new Map<string, OverrideUsage>()
+  for (const entry of normalized) {
+    latestByRuleId.set(entry.ruleId, entry)
+  }
+
+  return Array.from(latestByRuleId.values())
 }
 
 type RuleInput = Partial<Rule> & { id?: string }
@@ -112,7 +196,8 @@ function cloneRuleForStorage(rule: RuleInput, fallback?: Rule, defaultOrder = 0)
     searchInUrl: typeof rule.searchInUrl === 'boolean' ? rule.searchInUrl : (fallback?.searchInUrl ?? false),
     searchInHeading: typeof rule.searchInHeading === 'boolean' ? rule.searchInHeading : (fallback?.searchInHeading ?? false),
     searchInBody: typeof rule.searchInBody === 'boolean' ? rule.searchInBody : (fallback?.searchInBody ?? true),
-    message: typeof rule.message === 'string' ? rule.message : (fallback?.message ?? '')
+    message: typeof rule.message === 'string' ? rule.message : (fallback?.message ?? ''),
+    overrideSettings: cloneOverrideSettingsForStorage(rule.overrideSettings)
   }
 }
 
@@ -144,7 +229,8 @@ function cloneSessionForStorage(session: SessionInput, fallback?: Session, defau
       fallback?.rules ?? []
     ),
     message: typeof session.message === 'string' ? session.message : (fallback?.message ?? ''),
-    order: typeof session.order === 'number' ? session.order : (fallback?.order ?? defaultOrder)
+    order: typeof session.order === 'number' ? session.order : (fallback?.order ?? defaultOrder),
+    overrideSettings: cloneOverrideSettingsForStorage(session.overrideSettings)
   }
 }
 
@@ -186,7 +272,8 @@ function normalizeRule(rule: Rule): Rule {
     searchInUrl: rule.searchInUrl ?? false,
     searchInHeading: rule.searchInHeading ?? false,
     searchInBody: rule.searchInBody ?? true,
-    message: rule.message ?? ''
+    message: rule.message ?? '',
+    overrideSettings: normalizeOverrideSettings(rule.overrideSettings)
   }
 }
 
@@ -253,7 +340,8 @@ export async function getSessions(): Promise<Session[]> {
       daysOfWeek: toDaysOfWeek(session.daysOfWeek),
       rules: Array.isArray(session.rules) ? session.rules.map(normalizeRule) : [],
       message: session.message ?? '',
-      order: session.order ?? index
+      order: session.order ?? index,
+      overrideSettings: normalizeOverrideSettings(session.overrideSettings)
     }))
     .sort((a, b) => a.order - b.order)
 }
@@ -428,6 +516,11 @@ export async function getSettings(): Promise<Settings> {
     normalizedSettings.globalRulesEnabled = settings.globalRulesEnabled
   }
 
+  const overrideDefaults = normalizeOverrideSettings(settings.overrideDefaults)
+  if (overrideDefaults) {
+    normalizedSettings.overrideDefaults = overrideDefaults
+  }
+
   return normalizedSettings
 }
 
@@ -442,6 +535,9 @@ export async function saveSettings(settings: Settings): Promise<void> {
         : (existingSettings.globalMessage ?? ''),
       motivationMessages: normalizeMotivationMessages(
         settings.motivationMessages ?? existingSettings.motivationMessages
+      ),
+      overrideDefaults: cloneOverrideSettingsForStorage(
+        settings.overrideDefaults ?? existingSettings.overrideDefaults
       )
     }
 
@@ -461,4 +557,43 @@ export async function getGlobalMessage(): Promise<string> {
 export async function getMotivationMessages(): Promise<string[]> {
   const settings = await getSettings()
   return settings.motivationMessages ?? []
+}
+
+export async function getOverrideUsageEntries(): Promise<OverrideUsage[]> {
+  const data = await getStorageData()
+  const normalized = normalizeOverrideUsageEntries(data.overrideUsage)
+
+  if (normalized.length !== data.overrideUsage.length) {
+    await chrome.storage.local.set({ overrideUsage: normalized })
+  }
+
+  return normalized
+}
+
+export async function getOverrideUsageEntry(ruleId: string): Promise<OverrideUsage | undefined> {
+  const entries = await getOverrideUsageEntries()
+  return entries.find(entry => entry.ruleId === ruleId)
+}
+
+export async function saveOverrideUsageEntry(entry: OverrideUsage): Promise<void> {
+  await withStorageLock(async () => {
+    const entries = await getOverrideUsageEntries()
+    const normalizedEntry = normalizeOverrideUsageEntry(entry)
+
+    if (!normalizedEntry) {
+      throw new Error('Invalid override usage entry')
+    }
+
+    const nextEntries = entries.filter(existing => existing.ruleId !== normalizedEntry.ruleId)
+    nextEntries.push(normalizedEntry)
+    await chrome.storage.local.set({ overrideUsage: nextEntries })
+  })
+}
+
+export async function deleteOverrideUsageEntry(ruleId: string): Promise<void> {
+  await withStorageLock(async () => {
+    const entries = await getOverrideUsageEntries()
+    const nextEntries = entries.filter(entry => entry.ruleId !== ruleId)
+    await chrome.storage.local.set({ overrideUsage: nextEntries })
+  })
 }

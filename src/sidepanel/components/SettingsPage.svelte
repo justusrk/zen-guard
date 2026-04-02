@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Settings } from '@/lib/types'
+  import type { OverrideSettings, Settings } from '@/lib/types'
   import { getSettings, saveSettings } from '@/lib/storage'
   import { inspiringMessages } from '@/lib/messages'
 
@@ -25,11 +25,18 @@
 
   let globalMessage = $state('')
   let motivationMessages = $state<string[]>([])
+  let overrideDefaultsEnabled = $state(false)
+  let maxOverrideMinutes = $state(15)
+  let resetIntervalMinutes = $state(1440)
+  let requireCountdown = $state(true)
+  let requireQuoteCompletion = $state(true)
   let newMotivation = $state('')
   let searchQuery = $state('')
   let loading = $state(true)
   let saving = $state(false)
   let saveSuccess = $state(false)
+  const resetIntervalPresets = [300, 720, 1440]
+  let resetIntervalMode = $state<'300' | '720' | '1440' | 'custom'>('1440')
 
   const filteredMessages = $derived(
     searchQuery.trim()
@@ -42,6 +49,14 @@
       const settings = await getSettings()
       globalMessage = settings.globalMessage || ''
       motivationMessages = [...(settings.motivationMessages ?? [])]
+      overrideDefaultsEnabled = settings.overrideDefaults?.enabled ?? false
+      maxOverrideMinutes = settings.overrideDefaults?.maxOverrideMinutes ?? 15
+      resetIntervalMinutes = settings.overrideDefaults?.resetIntervalMinutes ?? 1440
+      requireCountdown = settings.overrideDefaults?.requireCountdown ?? true
+      requireQuoteCompletion = settings.overrideDefaults?.requireQuoteCompletion ?? true
+      resetIntervalMode = resetIntervalPresets.includes(resetIntervalMinutes)
+        ? String(resetIntervalMinutes) as '300' | '720' | '1440'
+        : 'custom'
     } catch (e) {
       console.error('Failed to load settings:', e)
     } finally {
@@ -53,15 +68,33 @@
     saving = true
     saveSuccess = false
     try {
+      if (!Number.isFinite(maxOverrideMinutes) || maxOverrideMinutes <= 0) {
+        throw new Error('Temporary unblock minutes must be greater than 0')
+      }
+
+      if (!Number.isFinite(resetIntervalMinutes) || resetIntervalMinutes <= 0) {
+        throw new Error('Reset interval must be greater than 0')
+      }
+
+      const overrideDefaults: OverrideSettings = {
+        enabled: overrideDefaultsEnabled,
+        maxOverrideMinutes: Math.max(1, Math.floor(maxOverrideMinutes)),
+        resetIntervalMinutes: Math.max(1, Math.floor(resetIntervalMinutes)),
+        requireCountdown,
+        requireQuoteCompletion
+      }
+
       const settings: Settings = {
         globalMessage: globalMessage.trim(),
-        motivationMessages: motivationMessages
+        motivationMessages: motivationMessages,
+        overrideDefaults
       }
       await saveSettings(settings)
       saveSuccess = true
       setTimeout(() => { saveSuccess = false }, 2000)
     } catch (e) {
       console.error('Failed to save settings:', e)
+      showToast(e instanceof Error ? e.message : 'Failed to save settings', 'error')
     } finally {
       saving = false
     }
@@ -84,6 +117,16 @@
       e.preventDefault()
       addMotivation()
     }
+  }
+
+  function handleResetIntervalModeChange(value: string) {
+    if (value === '300' || value === '720' || value === '1440') {
+      resetIntervalMode = value
+      resetIntervalMinutes = Number(value)
+      return
+    }
+
+    resetIntervalMode = 'custom'
   }
 
   let motivationFileInput = $state<HTMLInputElement | null>(null)
@@ -211,6 +254,58 @@
             placeholder="Enter a default message to show when sites are blocked..."
             rows="3"
           ></textarea>
+
+          <div class="override-panel">
+            <h4>Temporary Unblock Defaults</h4>
+            <p class="description">
+              Used when a rule or Zen Window does not define its own temporary unblock settings.
+            </p>
+
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={overrideDefaultsEnabled} />
+              <span>Enable temporary unblock requests by default</span>
+            </label>
+
+            <div class="form-row">
+              <div class="field">
+                <label for="max-override-minutes">Max Unblock Minutes</label>
+                <input type="number" id="max-override-minutes" bind:value={maxOverrideMinutes} min="1" step="1" />
+              </div>
+
+              <div class="field">
+                <label for="reset-interval-mode">Reset Interval</label>
+                <select
+                  id="reset-interval-mode"
+                  value={resetIntervalMode}
+                  onchange={(event) => handleResetIntervalModeChange((event.currentTarget as HTMLSelectElement).value)}
+                >
+                  <option value="300">Every 5 hours</option>
+                  <option value="720">Every 12 hours</option>
+                  <option value="1440">Every 24 hours</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+            </div>
+
+            {#if resetIntervalMode === 'custom'}
+              <div class="field">
+                <label for="custom-reset-interval">Custom Reset Minutes</label>
+                <input type="number" id="custom-reset-interval" bind:value={resetIntervalMinutes} min="1" step="1" />
+              </div>
+            {/if}
+
+            <div class="toggle-stack">
+              <label class="checkbox-label">
+                <input type="checkbox" bind:checked={requireCountdown} />
+                <span>Require 10-second countdown</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" bind:checked={requireQuoteCompletion} />
+                <span>Require quote typing</span>
+              </label>
+            </div>
+          </div>
+
           <div class="save-row">
             <button class="save-btn" onclick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save'}
@@ -520,7 +615,9 @@
   }
 
   textarea,
-  input[type="text"] {
+  input[type="text"],
+  input[type="number"],
+  select {
     width: 100%;
     padding: 0.5rem 0.75rem;
     border: 1px solid #d1d5db;
@@ -534,10 +631,59 @@
   }
 
   textarea:focus,
-  input[type="text"]:focus {
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  select:focus {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+
+  .override-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    background: #f9fafb;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  .field {
+    flex: 1;
+  }
+
+  .field label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #374151;
+  }
+
+  .checkbox-label input {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .toggle-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
   }
 
   .save-row {

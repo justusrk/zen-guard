@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Rule, RuleType } from '@/lib/types'
+  import type { OverrideSettings, Rule, RuleType } from '@/lib/types'
 
   interface Props {
     rule: Rule | null
@@ -23,8 +23,18 @@
   let searchInHeading = $state(initialSnapshot?.searchInHeading ?? false)
   let searchInBody = $state(initialSnapshot?.searchInBody ?? true)
   let message = $state(initialSnapshot?.message ?? '')
+  let hasCustomOverrideSettings = $state(Boolean(initialSnapshot?.overrideSettings))
+  let overrideEnabled = $state(initialSnapshot?.overrideSettings?.enabled ?? true)
+  let maxOverrideMinutes = $state(initialSnapshot?.overrideSettings?.maxOverrideMinutes ?? 15)
+  let resetIntervalMinutes = $state(initialSnapshot?.overrideSettings?.resetIntervalMinutes ?? 1440)
+  let requireCountdown = $state(initialSnapshot?.overrideSettings?.requireCountdown ?? true)
+  let requireQuoteCompletion = $state(initialSnapshot?.overrideSettings?.requireQuoteCompletion ?? true)
   let error = $state('')
   let newItem = $state('')
+  const resetIntervalPresets = [300, 720, 1440]
+  let resetIntervalMode = $state<'300' | '720' | '1440' | 'custom'>(
+    resetIntervalPresets.includes(resetIntervalMinutes) ? String(resetIntervalMinutes) as '300' | '720' | '1440' : 'custom'
+  )
 
   const ruleTypes: { value: RuleType; label: string; description: string }[] = [
     { value: 'blacklist_exact', label: 'Block URLs', description: 'Block a list of websites or URLs' },
@@ -102,6 +112,16 @@
     }
   }
 
+  function handleResetIntervalModeChange(value: string) {
+    if (value === '300' || value === '720' || value === '1440') {
+      resetIntervalMode = value
+      resetIntervalMinutes = Number(value)
+      return
+    }
+
+    resetIntervalMode = 'custom'
+  }
+
   function handleSubmit() {
     error = ''
 
@@ -129,6 +149,28 @@
       }
     }
 
+    if (hasCustomOverrideSettings) {
+      if (!Number.isFinite(maxOverrideMinutes) || maxOverrideMinutes <= 0) {
+        error = 'Temporary unblock minutes must be greater than 0'
+        return
+      }
+
+      if (!Number.isFinite(resetIntervalMinutes) || resetIntervalMinutes <= 0) {
+        error = 'Reset interval must be greater than 0'
+        return
+      }
+    }
+
+    const overrideSettings: OverrideSettings | undefined = hasCustomOverrideSettings
+      ? {
+          enabled: overrideEnabled,
+          maxOverrideMinutes: Math.floor(maxOverrideMinutes),
+          resetIntervalMinutes: Math.floor(resetIntervalMinutes),
+          requireCountdown,
+          requireQuoteCompletion
+        }
+      : undefined
+
     onSave({
       id: initialSnapshot?.id,
       name: name.trim(),
@@ -142,7 +184,8 @@
       searchInUrl: isKeywordType ? searchInUrl : false,
       searchInHeading: isKeywordType ? searchInHeading : false,
       searchInBody: isKeywordType ? searchInBody : true,
-      message: message.trim()
+      message: message.trim(),
+      overrideSettings
     })
   }
 </script>
@@ -262,6 +305,62 @@
 
       <div class="form-group checkbox-group">
         <label class="checkbox-label">
+          <input type="checkbox" bind:checked={hasCustomOverrideSettings} />
+          <span>Use rule-specific temporary unblock settings</span>
+        </label>
+        <p class="hint">Leave off to inherit from the active Zen Window or global defaults</p>
+      </div>
+
+      {#if hasCustomOverrideSettings}
+        <div class="override-panel">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={overrideEnabled} />
+            <span>Enable temporary unblock requests for this rule</span>
+          </label>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="max-override-minutes">Max Unblock Minutes</label>
+              <input type="number" id="max-override-minutes" bind:value={maxOverrideMinutes} min="1" step="1" />
+            </div>
+
+            <div class="form-group">
+              <label for="reset-interval-mode">Reset Interval</label>
+              <select
+                id="reset-interval-mode"
+                value={resetIntervalMode}
+                onchange={(event) => handleResetIntervalModeChange((event.currentTarget as HTMLSelectElement).value)}
+              >
+                <option value="300">Every 5 hours</option>
+                <option value="720">Every 12 hours</option>
+                <option value="1440">Every 24 hours</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+          </div>
+
+          {#if resetIntervalMode === 'custom'}
+            <div class="form-group">
+              <label for="custom-reset-interval">Custom Reset Minutes</label>
+              <input type="number" id="custom-reset-interval" bind:value={resetIntervalMinutes} min="1" step="1" />
+            </div>
+          {/if}
+
+          <div class="override-options">
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={requireCountdown} />
+              <span>Require 10-second countdown</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={requireQuoteCompletion} />
+              <span>Require quote typing</span>
+            </label>
+          </div>
+        </div>
+      {/if}
+
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
           <input type="checkbox" bind:checked={skipRemaining} />
           <span>Stop processing rules after match</span>
         </label>
@@ -312,6 +411,15 @@
     margin-bottom: 1rem;
   }
 
+  .form-row {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .form-row .form-group {
+    flex: 1;
+  }
+
   label,
   .label {
     display: block;
@@ -322,6 +430,7 @@
   }
 
   input[type="text"],
+  input[type="number"],
   select,
   textarea {
     width: 100%;
@@ -457,6 +566,20 @@
     margin: 0.375rem 0 0;
     font-size: 0.75rem;
     color: #6b7280;
+  }
+
+  .override-panel {
+    margin-bottom: 1rem;
+    padding: 0.875rem;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+  }
+
+  .override-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .error {

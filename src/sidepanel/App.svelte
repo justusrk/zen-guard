@@ -140,7 +140,7 @@
 
   async function handleSaveSession(session: Omit<Session, 'id'> & { id?: string }) {
     try {
-      const savedSession = await saveSession(session as Session)
+      const savedSession = await saveSession(session)
       await loadData()
       showSessionForm = false
       editingSession = null

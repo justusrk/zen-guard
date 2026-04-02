@@ -1,6 +1,7 @@
 import type { Rule, EvaluationResult, Session } from './types'
 import { getActiveSession } from './session-manager'
 import { getGlobalRules, getSettings } from './storage'
+import { isTemporaryOverrideActiveForContext } from './temporary-overrides'
 
 const isDev = import.meta.env.DEV
 const log = (...args: unknown[]) => isDev && console.log('[ZenGuard]', ...args)
@@ -191,6 +192,9 @@ export async function evaluateUrl(
       case 'blacklist_exact': {
         const match = urlMatchesAny(url, rule)
         if (match.matches) {
+          if (await isTemporaryOverrideActiveForContext(rule, activeSession, settings)) {
+            break
+          }
           const result: EvaluationResult = { blocked: true, rule, session: activeSession, reason: `URL blocked: ${match.matchedValue}` }
           if (rule.skipRemaining) {
             return result
@@ -212,6 +216,9 @@ export async function evaluateUrl(
 
       case 'blacklist_keyword':
         if (keywordMatchesLocations(rule, url, pageHeadings, pageContent)) {
+          if (await isTemporaryOverrideActiveForContext(rule, activeSession, settings)) {
+            break
+          }
           const result: EvaluationResult = { blocked: true, rule, session: activeSession, reason: 'Keyword blocked' }
           if (rule.skipRemaining) {
             return result
@@ -235,6 +242,9 @@ export async function evaluateUrl(
       case 'yt_channel_blacklist': {
         const match = channelMatchesAny(youtubeChannel, youtubeChannelId, rule)
         if (match.matches) {
+          if (await isTemporaryOverrideActiveForContext(rule, activeSession, settings)) {
+            break
+          }
           const result: EvaluationResult = { blocked: true, rule, session: activeSession, reason: `YouTube channel blocked: ${match.matchedValue}` }
           if (rule.skipRemaining) {
             return result
@@ -295,6 +305,9 @@ export async function evaluateUrlOnly(url: string): Promise<EvaluationResult> {
     if (rule.type === 'blacklist_exact') {
       const match = urlMatchesAny(url, rule)
       if (match.matches) {
+        if (await isTemporaryOverrideActiveForContext(rule, activeSession, settings)) {
+          continue
+        }
         const result: EvaluationResult = { blocked: true, rule, session: activeSession, reason: `URL blocked: ${match.matchedValue}` }
         if (rule.skipRemaining) {
           return result

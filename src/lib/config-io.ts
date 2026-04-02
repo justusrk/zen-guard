@@ -1,4 +1,4 @@
-import type { Session, Rule, Settings } from './types'
+import type { OverrideSettings, Session, Rule, Settings } from './types'
 import { getSessions, getGlobalRules, getSettings, replaceStorageData } from './storage'
 
 const isDev = import.meta.env.DEV
@@ -116,7 +116,8 @@ function normalizeRule(rule: Rule, index: number): Rule {
     searchInUrl: rule.searchInUrl ?? false,
     searchInHeading: rule.searchInHeading ?? false,
     searchInBody: rule.searchInBody ?? true,
-    message: rule.message ?? ''
+    message: rule.message ?? '',
+    overrideSettings: normalizeOverrideSettings(rule.overrideSettings)
   }
 }
 
@@ -130,7 +131,8 @@ function normalizeSession(session: Session, index: number): Session {
     enabled: session.enabled ?? true,
     rules: Array.isArray(session.rules) ? session.rules.map(normalizeRule) : [],
     message: session.message ?? '',
-    order: index
+    order: index,
+    overrideSettings: normalizeOverrideSettings(session.overrideSettings)
   }
 }
 
@@ -155,7 +157,34 @@ function normalizeSettings(settings: Settings | undefined): Settings {
     normalizedSettings.globalRulesEnabled = settings.globalRulesEnabled
   }
 
+  const overrideDefaults = normalizeOverrideSettings(settings?.overrideDefaults)
+  if (overrideDefaults) {
+    normalizedSettings.overrideDefaults = overrideDefaults
+  }
+
   return normalizedSettings
+}
+
+function normalizeOverrideSettings(settings: OverrideSettings | undefined): OverrideSettings | undefined {
+  if (!settings) {
+    return undefined
+  }
+
+  if (
+    typeof settings.enabled !== 'boolean' ||
+    typeof settings.maxOverrideMinutes !== 'number' ||
+    typeof settings.resetIntervalMinutes !== 'number'
+  ) {
+    return undefined
+  }
+
+  return {
+    enabled: settings.enabled,
+    maxOverrideMinutes: Math.max(1, Math.floor(settings.maxOverrideMinutes)),
+    resetIntervalMinutes: Math.max(1, Math.floor(settings.resetIntervalMinutes)),
+    requireCountdown: settings.requireCountdown ?? false,
+    requireQuoteCompletion: settings.requireQuoteCompletion ?? false
+  }
 }
 
 export async function importConfig(file: File): Promise<void> {

@@ -11,12 +11,23 @@ log('Service worker starting...')
 
 const pendingScans = new Map<number, { url: string }>()
 
-function getBlockedPageUrl(blockedUrl: string, ruleName: string, reason: string, message?: string): string {
+function getBlockedPageUrl(
+  blockedUrl: string,
+  ruleId: string,
+  ruleName: string,
+  reason: string,
+  sessionId?: string,
+  message?: string
+): string {
   const params = new URLSearchParams({
     url: blockedUrl,
+    ruleId,
     rule: ruleName,
     reason: reason
   })
+  if (sessionId) {
+    params.set('sessionId', sessionId)
+  }
   if (message) {
     params.set('message', message)
   }
@@ -53,7 +64,14 @@ async function handleNavigation(tabId: number, url: string): Promise<void> {
     await incrementBlockCount(blockEvent)
 
     const message = await getBlockMessage(result)
-    const blockedPageUrl = getBlockedPageUrl(url, result.rule.name, result.reason || 'Blocked', message)
+    const blockedPageUrl = getBlockedPageUrl(
+      url,
+      result.rule.id,
+      result.rule.name,
+      result.reason || 'Blocked',
+      result.session?.id,
+      message
+    )
     chrome.tabs.update(tabId, { url: blockedPageUrl })
     return
   }
@@ -73,7 +91,14 @@ async function handleNavigation(tabId: number, url: string): Promise<void> {
         }
         await incrementBlockCount(blockEvent)
         const message = await getBlockMessage(channelResult)
-        const blockedPageUrl = getBlockedPageUrl(url, channelResult.rule.name, channelResult.reason || 'Blocked', message)
+        const blockedPageUrl = getBlockedPageUrl(
+          url,
+          channelResult.rule.id,
+          channelResult.rule.name,
+          channelResult.reason || 'Blocked',
+          channelResult.session?.id,
+          message
+        )
         chrome.tabs.update(tabId, { url: blockedPageUrl })
         return
       }
@@ -133,7 +158,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await incrementBlockCount(blockEvent)
 
         const blockMessage = await getBlockMessage(result)
-        const blockedPageUrl = getBlockedPageUrl(url, result.rule.name, result.reason || 'Blocked', blockMessage)
+        const blockedPageUrl = getBlockedPageUrl(
+          url,
+          result.rule.id,
+          result.rule.name,
+          result.reason || 'Blocked',
+          result.session?.id,
+          blockMessage
+        )
         chrome.tabs.update(tabId, { url: blockedPageUrl })
       }
       pendingScans.delete(tabId)
@@ -164,7 +196,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!blockMessage) {
         blockMessage = await getGlobalMessage()
       }
-      const blockedPageUrl = getBlockedPageUrl(url, ruleName, `Keyword "${keyword}" blocked`, blockMessage)
+      const blockedPageUrl = getBlockedPageUrl(
+        url,
+        message.ruleId,
+        ruleName,
+        `Keyword "${keyword}" blocked`,
+        message.sessionId,
+        blockMessage
+      )
       chrome.tabs.update(sender.tab!.id!, { url: blockedPageUrl })
     })
     return true

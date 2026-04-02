@@ -1,16 +1,33 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { inspiringMessages } from '@/lib/messages'
   import { getActiveSession, getTimeRemainingInSession, formatMinutes } from '@/lib/session-manager'
   import { getMotivationMessages } from '@/lib/storage'
+  import { getTemporaryOverrideStatus, grantTemporaryOverride, type TemporaryOverrideStatus } from '@/lib/temporary-overrides'
   import type { Session } from '@/lib/types'
 
   let inspiringMessage = $state('')
+  let challengeQuote = $state('')
   let blockedUrl = $state('')
+  let ruleId = $state('')
+  let sessionId = $state('')
   let ruleName = $state('')
   let reason = $state('')
   let customMessage = $state('')
   let activeSession = $state<Session | null>(null)
   let timeRemaining = $state('')
+  let overrideStatus = $state<TemporaryOverrideStatus | null>(null)
+  let loadingOverride = $state(true)
+  let overrideError = $state('')
+  let granting = $state(false)
+  let requestStep = $state<'idle' | 'countdown' | 'quote'>('idle')
+  let countdownRemaining = $state(10)
+  let quoteInput = $state('')
+  let countdownTimer: number | null = null
+
+  const canSubmitQuote = $derived(
+    challengeQuote.length > 0 && quoteInput === challengeQuote
+  )
 
   function getRandomFromList(messages: string[]): string {
     if (messages.length === 0) return ''
@@ -21,6 +38,8 @@
   function parseUrlParams() {
     const params = new URLSearchParams(window.location.search)
     blockedUrl = params.get('url') || 'Unknown'
+    ruleId = params.get('ruleId') || ''
+    sessionId = params.get('sessionId') || ''
     ruleName = params.get('rule') || 'Unknown rule'
     reason = params.get('reason') || 'Blocked by Zen Guard'
     customMessage = params.get('message') || ''
@@ -30,27 +49,46 @@
     try {
       activeSession = await getActiveSession()
       if (activeSession) {
-        const remaining = getTimeRemainingInSession(activeSession)
-        timeRemaining = formatMinutes(remaining)
+        timeRemaining = formatMinutes(getTimeRemainingInSession(activeSession))
       }
     } catch {
-      // Session info not available
+      activeSession = null
+      timeRemaining = ''
     }
   }
 
   async function loadInspiringMessage() {
     try {
       const messages = await getMotivationMessages()
-      // Use user's messages if they have any, otherwise fall back to defaults
-      if (messages.length > 0) {
-        inspiringMessage = getRandomFromList(messages)
-      } else {
-        inspiringMessage = getRandomFromList(inspiringMessages)
-      }
+      const pool = messages.length > 0 ? messages : inspiringMessages
+      inspiringMessage = getRandomFromList(pool)
+      challengeQuote = inspiringMessage
     } catch {
-      // Fall back to default messages
       inspiringMessage = getRandomFromList(inspiringMessages)
+      challengeQuote = inspiringMessage
     }
+  }
+
+  async function loadOverrideStatus() {
+    if (!ruleId) {
+      loadingOverride = false
+      return
+    }
+
+    loadingOverride = true
+    overrideError = ''
+
+    try {
+      overrideStatus = await getTemporaryOverrideStatus(ruleId, sessionId || undefined)
+    } catch (error) {
+      overrideError = error instanceof Error ? error.message : 'Failed to load temporary unblock status'
+    } finally {
+      loadingOverride = false
+    }
+  }
+
+  function formatAllowance(minutes: number): string {
+    return `${minutes} min`
   }
 
   function getDisplayUrl(url: string): string {
@@ -62,16 +100,91 @@
     }
   }
 
-  $effect(() => {
-    parseUrlParams()
-    loadSessionInfo()
-    loadInspiringMessage()
+  function clearCountdown() {
+    if (countdownTimer !== null) {
+      window.clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }
 
-    const interval = setInterval(() => {
-      loadSessionInfo()
+  function startRequestFlow() {
+    if (!overrideStatus?.settings || overrideStatus.remainingMinutes <= 0 || granting) {
+      return
+    }
+
+    overrideError = ''
+    quoteInput = ''
+
+    if (overrideStatus.settings.requireCountdown) {
+      requestStep = 'countdown'
+      countdownRemaining = 10
+      clearCountdown()
+      countdownTimer = window.setInterval(() => {
+        countdownRemaining -= 1
+
+        if (countdownRemaining <= 0) {
+          clearCountdown()
+          if (overrideStatus?.settings?.requireQuoteCompletion) {
+            requestStep = 'quote'
+          } else {
+            void confirmTemporaryUnblock()
+          }
+        }
+      }, 1000)
+      return
+    }
+
+    if (overrideStatus.settings.requireQuoteCompletion) {
+      requestStep = 'quote'
+      return
+    }
+
+    void confirmTemporaryUnblock()
+  }
+
+  async function confirmTemporaryUnblock() {
+    if (!ruleId || granting) {
+      return
+    }
+
+    if (overrideStatus?.settings?.requireQuoteCompletion && !canSubmitQuote) {
+      return
+    }
+
+    granting = true
+    overrideError = ''
+
+    try {
+      const status = await grantTemporaryOverride(ruleId, sessionId || undefined)
+      overrideStatus = status
+      window.location.href = blockedUrl
+    } catch (error) {
+      overrideError = error instanceof Error ? error.message : 'Failed to grant temporary unblock'
+      requestStep = 'idle'
+      await loadOverrideStatus()
+    } finally {
+      granting = false
+    }
+  }
+
+  function blockClipboard(event: ClipboardEvent | DragEvent) {
+    event.preventDefault()
+  }
+
+  onMount(() => {
+    parseUrlParams()
+    void loadSessionInfo()
+    void loadInspiringMessage()
+    void loadOverrideStatus()
+
+    const interval = window.setInterval(() => {
+      void loadSessionInfo()
     }, 60000)
 
-    return () => clearInterval(interval)
+    return () => {
+      window.clearInterval(interval)
+      clearCountdown()
+    }
   })
 </script>
 
@@ -81,7 +194,58 @@
       {#if customMessage}
         <p class="custom-message">{customMessage}</p>
       {/if}
+
       <p class="inspiring-message">{inspiringMessage}</p>
+
+      {#if loadingOverride}
+        <div class="override-card loading">Loading temporary unblock...</div>
+      {:else if overrideStatus?.settings?.enabled}
+        <div class="override-card">
+          {#if overrideStatus.remainingMinutes > 0}
+            <button class="allow-btn" onclick={startRequestFlow} disabled={granting || requestStep !== 'idle'}>
+              {granting ? 'Allowing...' : `Allow for ${formatAllowance(overrideStatus.remainingMinutes)}`}
+            </button>
+            <p class="override-meta">
+              Remaining allowance now. Resets every {formatMinutes(overrideStatus.settings.resetIntervalMinutes)}.
+            </p>
+          {:else}
+            <p class="override-exhausted">Temporary unblock allowance exhausted.</p>
+          {/if}
+
+          {#if requestStep === 'countdown'}
+            <div class="request-step">
+              <p class="step-label">Stay intentional. Wait {countdownRemaining}s.</p>
+            </div>
+          {/if}
+
+          {#if requestStep === 'quote'}
+            <div class="request-step quote-step">
+              <p class="step-label">Type this quote exactly to continue.</p>
+              <blockquote>{challengeQuote}</blockquote>
+              <textarea
+                bind:value={quoteInput}
+                rows="3"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="Type the quote exactly"
+                onpaste={blockClipboard}
+                ondrop={blockClipboard}
+                oncopy={blockClipboard}
+                oncut={blockClipboard}
+              ></textarea>
+              <button class="confirm-btn" onclick={confirmTemporaryUnblock} disabled={!canSubmitQuote || granting}>
+                {granting ? 'Allowing...' : `Confirm ${formatAllowance(overrideStatus.remainingMinutes)}`}
+              </button>
+            </div>
+          {/if}
+
+          {#if overrideError}
+            <p class="error">{overrideError}</p>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <div class="info-section">
@@ -98,15 +262,25 @@
       <div class="block-info">
         <p class="blocked-url" title={blockedUrl}>{getDisplayUrl(blockedUrl)}</p>
         <p class="block-reason">Blocked by: {ruleName}</p>
+        <p class="block-reason">{reason}</p>
       </div>
     </div>
   </div>
 </div>
 
 <style>
+  :global(body) {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Iowan Old Style", "Palatino Linotype", serif;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 35%),
+      linear-gradient(135deg, #1d3b35, #2f5e4c 50%, #d2b06d 100%);
+    color: #f9f6ef;
+  }
+
   .container {
-    width: 100%;
-    height: 100%;
+    min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -114,41 +288,119 @@
   }
 
   .content {
-    max-width: 800px;
-    text-align: center;
+    width: min(860px, 100%);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 4rem;
+    gap: 2rem;
+    text-align: center;
   }
 
   .message-section {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 2rem;
+    gap: 1.5rem;
   }
 
   .custom-message {
-    font-size: 3rem;
-    font-weight: 400;
-    line-height: 1.3;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    text-align: center;
+    margin: 0;
+    font-size: clamp(2rem, 5vw, 3.6rem);
+    line-height: 1.15;
   }
 
   .inspiring-message {
-    font-size: 2rem;
-    font-weight: 300;
+    max-width: 22ch;
+    margin: 0;
+    font-size: clamp(1.3rem, 3vw, 2rem);
     line-height: 1.4;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    opacity: 0.85;
+    opacity: 0.92;
+  }
+
+  .override-card {
+    width: min(520px, 100%);
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 1rem;
+    background: rgba(12, 26, 22, 0.42);
+    backdrop-filter: blur(14px);
+  }
+
+  .override-card.loading {
+    color: rgba(249, 246, 239, 0.82);
+  }
+
+  .allow-btn,
+  .confirm-btn {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: none;
+    border-radius: 999px;
+    background: #f2d28f;
+    color: #20322c;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .allow-btn:disabled,
+  .confirm-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .override-meta,
+  .override-exhausted,
+  .step-label,
+  .error {
+    margin: 0.85rem 0 0;
+    font-size: 0.88rem;
+    line-height: 1.4;
+  }
+
+  .override-exhausted,
+  .error {
+    color: #ffd0d0;
+  }
+
+  .request-step {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  blockquote {
+    margin: 0;
+    padding: 0.9rem 1rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  textarea {
+    width: 100%;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: #f9f6ef;
+    font: inherit;
+    resize: vertical;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: rgba(242, 210, 143, 0.8);
+    box-shadow: 0 0 0 3px rgba(242, 210, 143, 0.16);
+  }
+
+  textarea::placeholder {
+    color: rgba(249, 246, 239, 0.55);
   }
 
   .info-section {
-    opacity: 0.8;
+    opacity: 0.84;
   }
 
   .session-info {
@@ -156,34 +408,43 @@
     font-size: 1rem;
   }
 
-  .session-label {
-    opacity: 0.7;
+  .session-label,
+  .time-remaining {
+    opacity: 0.74;
   }
 
   .session-name {
-    font-weight: 500;
     margin-left: 0.5rem;
+    font-weight: 600;
   }
 
   .time-remaining {
-    opacity: 0.7;
     margin-left: 0.5rem;
   }
 
   .block-info {
-    font-size: 0.875rem;
-    opacity: 0.6;
+    font-size: 0.88rem;
   }
 
   .blocked-url {
-    max-width: 400px;
+    max-width: 100%;
+    margin: 0 0 0.35rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-bottom: 0.25rem;
   }
 
   .block-reason {
-    font-size: 0.75rem;
+    margin: 0.15rem 0;
+  }
+
+  @media (max-width: 640px) {
+    .container {
+      padding: 1.25rem;
+    }
+
+    .override-card {
+      padding: 1rem;
+    }
   }
 </style>

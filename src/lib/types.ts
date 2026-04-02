@@ -6,6 +6,14 @@ export type RuleType =
   | 'yt_channel_blacklist'
   | 'yt_channel_whitelist'
 
+export interface OverrideSettings {
+  enabled: boolean
+  maxOverrideMinutes: number
+  resetIntervalMinutes: number
+  requireCountdown: boolean
+  requireQuoteCompletion: boolean
+}
+
 export interface Rule {
   id: string
   name: string
@@ -20,6 +28,7 @@ export interface Rule {
   searchInHeading: boolean
   searchInBody: boolean
   message?: string
+  overrideSettings?: OverrideSettings
 }
 
 export interface Session {
@@ -32,12 +41,14 @@ export interface Session {
   rules: Rule[]
   message?: string
   order: number
+  overrideSettings?: OverrideSettings
 }
 
 export interface Settings {
   globalMessage?: string
   motivationMessages?: string[]
   globalRulesEnabled?: boolean
+  overrideDefaults?: OverrideSettings
 }
 
 export interface BlockEvent {
@@ -53,11 +64,19 @@ export interface Stats {
   blockHistory: BlockEvent[]
 }
 
+export interface OverrideUsage {
+  ruleId: string
+  windowStartedAt: number
+  usedMinutes: number
+  activeUntil?: number
+}
+
 export interface StorageData {
   sessions: Session[]
   globalRules: Rule[]
   stats: Stats
   settings: Settings
+  overrideUsage: OverrideUsage[]
 }
 
 export interface EvaluationResult {
