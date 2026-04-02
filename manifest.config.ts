@@ -22,13 +22,13 @@ export default defineManifest({
   content_scripts: [{
     js: ['src/content/main.ts'],
     matches: ['<all_urls>'],
+    run_at: 'document_start',
   }],
   permissions: [
     'storage',
     'webNavigation',
     'alarms',
     'sidePanel',
-    'scripting',
   ],
   host_permissions: ['<all_urls>'],
   side_panel: {

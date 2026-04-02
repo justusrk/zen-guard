@@ -11,19 +11,27 @@ log('Service worker starting...')
 
 const pendingScans = new Map<number, { url: string }>()
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function redirectToBlockedPage(tabId: number, blockedPageUrl: string): Promise<void> {
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (url: string) => {
-        window.location.replace(url)
-      },
-      args: [blockedPageUrl],
-    })
-  } catch (error) {
-    log('Failed to replace location, falling back to tabs.update', error)
-    await chrome.tabs.update(tabId, { url: blockedPageUrl })
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'REDIRECT_TO_BLOCKED_PAGE',
+        url: blockedPageUrl,
+      })
+      return
+    } catch (error) {
+      log('Redirect message failed', { tabId, attempt, error })
+      await sleep(50)
+    }
   }
+
+  await chrome.tabs.update(tabId, { url: blockedPageUrl })
 }
 
 function getBlockedPageUrl(

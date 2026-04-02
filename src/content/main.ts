@@ -6,6 +6,16 @@ function sendScanResult(result: ContentScanResult): void {
   chrome.runtime.sendMessage({ type: 'SCAN_RESULT', result })
 }
 
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type !== 'REDIRECT_TO_BLOCKED_PAGE' || typeof message.url !== 'string') {
+    return false
+  }
+
+  window.location.replace(message.url)
+  sendResponse({ ok: true })
+  return false
+})
+
 function extractHeadings(): string {
   const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6, title')
   return Array.from(headings)
