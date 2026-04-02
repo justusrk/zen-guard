@@ -41,18 +41,7 @@
     try {
       const settings = await getSettings()
       globalMessage = settings.globalMessage || ''
-
-      // If no custom messages exist, initialize with default messages
-      if (!settings.motivationMessages || settings.motivationMessages.length === 0) {
-        motivationMessages = [...inspiringMessages]
-        // Save the defaults so they persist
-        await saveSettings({
-          ...settings,
-          motivationMessages: motivationMessages
-        })
-      } else {
-        motivationMessages = settings.motivationMessages
-      }
+      motivationMessages = [...(settings.motivationMessages ?? [])]
     } catch (e) {
       console.error('Failed to load settings:', e)
     } finally {

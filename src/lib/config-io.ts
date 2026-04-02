@@ -1,5 +1,5 @@
 import type { Session, Rule, Settings } from './types'
-import { getSessions, getGlobalRules, getSettings } from './storage'
+import { getSessions, getGlobalRules, getSettings, replaceStorageData } from './storage'
 
 const isDev = import.meta.env.DEV
 const log = (...args: unknown[]) => isDev && console.log('[ZenGuard]', ...args)
@@ -102,7 +102,7 @@ function isValidRule(rule: unknown): rule is Rule {
   return typeof r.name === 'string' && typeof r.type === 'string'
 }
 
-function normalizeRule(rule: Rule): Rule {
+function normalizeRule(rule: Rule, index: number): Rule {
   return {
     id: rule.id || crypto.randomUUID(),
     name: rule.name || 'Unnamed Rule',
@@ -111,7 +111,7 @@ function normalizeRule(rule: Rule): Rule {
     values: Array.isArray(rule.values) ? [...rule.values] : [],
     isRegex: rule.isRegex ?? false,
     enabled: rule.enabled ?? true,
-    order: rule.order ?? 0,
+    order: index,
     skipRemaining: rule.skipRemaining ?? false,
     searchInUrl: rule.searchInUrl ?? false,
     searchInHeading: rule.searchInHeading ?? false,
@@ -130,15 +130,32 @@ function normalizeSession(session: Session, index: number): Session {
     enabled: session.enabled ?? true,
     rules: Array.isArray(session.rules) ? session.rules.map(normalizeRule) : [],
     message: session.message ?? '',
-    order: session.order ?? index
+    order: index
   }
 }
 
-function normalizeSettings(settings: Settings | undefined): Settings {
-  return {
-    globalMessage: settings?.globalMessage ?? '',
-    motivationMessages: Array.isArray(settings?.motivationMessages) ? settings.motivationMessages : []
+function normalizeMotivationMessages(messages: unknown): string[] {
+  if (!Array.isArray(messages)) {
+    return []
   }
+
+  return messages
+    .filter((message): message is string => typeof message === 'string')
+    .map(message => message.trim())
+    .filter(Boolean)
+}
+
+function normalizeSettings(settings: Settings | undefined): Settings {
+  const normalizedSettings: Settings = {
+    globalMessage: settings?.globalMessage ?? '',
+    motivationMessages: normalizeMotivationMessages(settings?.motivationMessages)
+  }
+
+  if (typeof settings?.globalRulesEnabled === 'boolean') {
+    normalizedSettings.globalRulesEnabled = settings.globalRulesEnabled
+  }
+
+  return normalizedSettings
 }
 
 export async function importConfig(file: File): Promise<void> {
@@ -161,23 +178,27 @@ export async function importConfig(file: File): Promise<void> {
     throw new Error('Invalid configuration format')
   }
 
+  const config = data
   log('Validation passed, normalizing...')
 
   // Normalize all data before saving to ensure proper structure
-  const normalizedSessions = data.sessions.map(normalizeSession)
-  const normalizedGlobalRules = data.globalRules.map(normalizeRule)
-  const normalizedSettings = normalizeSettings(data.settings)
+  const normalizedSessions = config.sessions.map(normalizeSession)
+  const normalizedGlobalRules = config.globalRules.map(normalizeRule)
+  const storageUpdate: { sessions: Session[]; globalRules: Rule[]; settings?: Settings } = {
+    sessions: normalizedSessions,
+    globalRules: normalizedGlobalRules
+  }
+
+  if (config.settings !== undefined) {
+    storageUpdate.settings = normalizeSettings(config.settings)
+  }
 
   log('Normalized sessions:', normalizedSessions)
   log('Normalized global rules:', normalizedGlobalRules)
-  log('Normalized settings:', normalizedSettings)
+  log('Normalized settings:', storageUpdate.settings ?? '(preserved existing settings)')
 
-  // Clear existing data and replace with imported data
-  await chrome.storage.local.set({
-    sessions: normalizedSessions,
-    globalRules: normalizedGlobalRules,
-    settings: normalizedSettings
-  })
+  // Replace imported sections. Preserve existing settings if file omitted them.
+  await replaceStorageData(storageUpdate)
 
   log('Import complete!')
 }
