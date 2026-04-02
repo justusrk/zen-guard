@@ -28,6 +28,7 @@ export default defineManifest({
     'webNavigation',
     'alarms',
     'sidePanel',
+    'scripting',
   ],
   host_permissions: ['<all_urls>'],
   side_panel: {

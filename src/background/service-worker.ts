@@ -11,6 +11,21 @@ log('Service worker starting...')
 
 const pendingScans = new Map<number, { url: string }>()
 
+async function redirectToBlockedPage(tabId: number, blockedPageUrl: string): Promise<void> {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (url: string) => {
+        window.location.replace(url)
+      },
+      args: [blockedPageUrl],
+    })
+  } catch (error) {
+    log('Failed to replace location, falling back to tabs.update', error)
+    await chrome.tabs.update(tabId, { url: blockedPageUrl })
+  }
+}
+
 function getBlockedPageUrl(
   blockedUrl: string,
   ruleId: string,
@@ -72,7 +87,7 @@ async function handleNavigation(tabId: number, url: string): Promise<void> {
       result.session?.id,
       message
     )
-    chrome.tabs.update(tabId, { url: blockedPageUrl })
+    await redirectToBlockedPage(tabId, blockedPageUrl)
     return
   }
 
@@ -99,7 +114,7 @@ async function handleNavigation(tabId: number, url: string): Promise<void> {
           channelResult.session?.id,
           message
         )
-        chrome.tabs.update(tabId, { url: blockedPageUrl })
+        await redirectToBlockedPage(tabId, blockedPageUrl)
         return
       }
     }
@@ -166,7 +181,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result.session?.id,
           blockMessage
         )
-        chrome.tabs.update(tabId, { url: blockedPageUrl })
+        await redirectToBlockedPage(tabId, blockedPageUrl)
       }
       pendingScans.delete(tabId)
     })
@@ -204,7 +219,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         message.sessionId,
         blockMessage
       )
-      chrome.tabs.update(sender.tab!.id!, { url: blockedPageUrl })
+      await redirectToBlockedPage(sender.tab!.id!, blockedPageUrl)
     })
     return true
   }
