@@ -41,12 +41,29 @@ export function getCurrentDayOfWeek(): number {
 export function isSessionActive(session: Session): boolean {
   if (!session.enabled) return false
 
-  const currentDay = getCurrentDayOfWeek()
   const daysOfWeek = Array.isArray(session.daysOfWeek) ? session.daysOfWeek : []
-  if (!daysOfWeek.includes(currentDay)) return false
-
   const currentTime = getCurrentTime()
-  return isTimeInRange(currentTime, session.startTime, session.endTime)
+  const currentDay = getCurrentDayOfWeek()
+  const currentMinutes = timeToMinutes(currentTime)
+  const startMinutes = timeToMinutes(session.startTime)
+  const endMinutes = timeToMinutes(session.endTime)
+  const crossesMidnight = startMinutes > endMinutes
+
+  if (!crossesMidnight) {
+    if (!daysOfWeek.includes(currentDay)) return false
+    return isTimeInRange(currentTime, session.startTime, session.endTime)
+  }
+
+  if (currentMinutes >= startMinutes) {
+    return daysOfWeek.includes(currentDay)
+  }
+
+  if (currentMinutes < endMinutes) {
+    const previousDay = (currentDay + 6) % 7
+    return daysOfWeek.includes(previousDay)
+  }
+
+  return false
 }
 
 export async function getActiveSession(): Promise<Session | null> {

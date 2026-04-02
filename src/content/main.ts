@@ -1,4 +1,5 @@
 import { isYouTubeVideoPage, isYouTubeChannelPage, getYouTubeChannel, getYouTubeChannelId, extractChannelFromUrl } from '@/lib/youtube'
+import { waitForContent } from './scanner'
 import type { ContentScanResult } from '@/lib/types'
 
 function sendScanResult(result: ContentScanResult): void {
@@ -11,14 +12,6 @@ function extractHeadings(): string {
     .map(h => h.textContent?.trim())
     .filter(Boolean)
     .join(' ')
-}
-
-function extractBodyContent(): string {
-  const body = document.body
-  if (!body) return ''
-  // Get text content, limit to reasonable size
-  const text = body.innerText || body.textContent || ''
-  return text.slice(0, 50000)
 }
 
 async function scanPage(): Promise<void> {
@@ -49,8 +42,8 @@ async function scanPage(): Promise<void> {
     }
   }
 
+  const pageContent = await waitForContent()
   const pageHeadings = extractHeadings()
-  const pageContent = extractBodyContent()
 
   const result: ContentScanResult = {
     hasKeywordMatch: false,
@@ -86,19 +79,31 @@ function waitForYouTubeContent(): Promise<void> {
   })
 }
 
+let scanTimeout: number | undefined
+
+function scheduleScan(delay: number): void {
+  if (scanTimeout) {
+    window.clearTimeout(scanTimeout)
+  }
+
+  scanTimeout = window.setTimeout(() => {
+    void scanPage()
+  }, delay)
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(scanPage, 100)
+    scheduleScan(100)
   })
 } else {
-  setTimeout(scanPage, 100)
+  scheduleScan(100)
 }
 
 let lastUrl = window.location.href
 const observer = new MutationObserver(() => {
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href
-    setTimeout(scanPage, 500)
+    scheduleScan(500)
   }
 })
 

@@ -8,24 +8,39 @@ const log = (...args: unknown[]) => isDev && console.log('[ZenGuard]', ...args)
 function urlMatchesPattern(url: string, pattern: string): boolean {
   try {
     const urlObj = new URL(url)
-    const normalizedUrl = urlObj.hostname + urlObj.pathname
+    const normalizedUrlHost = urlObj.hostname.replace(/^www\./, '').toLowerCase()
+    const normalizedUrlPath = urlObj.pathname.replace(/\/$/, '')
 
-    const normalizedPattern = pattern
+    const normalizedPatternInput = pattern
+      .trim()
       .replace(/^https?:\/\//, '')
       .replace(/^www\./, '')
       .replace(/\/$/, '')
+      .toLowerCase()
 
-    const urlWithoutWww = normalizedUrl.replace(/^www\./, '').replace(/\/$/, '')
+    const slashIndex = normalizedPatternInput.indexOf('/')
+    const patternHost = slashIndex >= 0
+      ? normalizedPatternInput.slice(0, slashIndex)
+      : normalizedPatternInput
+    const patternPath = slashIndex >= 0
+      ? normalizedPatternInput.slice(slashIndex)
+      : ''
 
-    if (urlWithoutWww === normalizedPattern || urlWithoutWww.startsWith(normalizedPattern + '/')) {
+    if (!patternHost) return false
+
+    const hostMatches =
+      normalizedUrlHost === patternHost ||
+      normalizedUrlHost.endsWith(`.${patternHost}`)
+
+    if (!hostMatches) {
+      return false
+    }
+
+    if (!patternPath) {
       return true
     }
 
-    if (urlObj.hostname.replace(/^www\./, '') === normalizedPattern) {
-      return true
-    }
-
-    return false
+    return normalizedUrlPath === patternPath || normalizedUrlPath.startsWith(`${patternPath}/`)
   } catch {
     return url.includes(pattern)
   }
