@@ -9,6 +9,7 @@
   let inspiringMessage = $state('')
   let challengeQuote = $state('')
   let blockedUrl = $state('')
+  let returnUrl = $state('')
   let ruleId = $state('')
   let sessionId = $state('')
   let ruleName = $state('')
@@ -38,6 +39,14 @@
   function parseUrlParams() {
     const params = new URLSearchParams(window.location.search)
     blockedUrl = params.get('url') || 'Unknown'
+    try {
+      const destination = new URL(params.get('returnUrl') || '')
+      if (['http:', 'https:'].includes(destination.protocol) && destination.href !== blockedUrl) {
+        returnUrl = destination.href
+      }
+    } catch {
+      returnUrl = ''
+    }
     ruleId = params.get('ruleId') || ''
     sessionId = params.get('sessionId') || ''
     ruleName = params.get('rule') || 'Unknown rule'
@@ -171,6 +180,16 @@
     event.preventDefault()
   }
 
+  function goBack(event: MouseEvent) {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    if (returnUrl) {
+      window.location.replace(returnUrl)
+    } else {
+      void chrome.tabs.update({ url: 'chrome://newtab/' })
+    }
+  }
+
   onMount(() => {
     parseUrlParams()
     void loadSessionInfo()
@@ -196,6 +215,10 @@
       {/if}
 
       <p class="inspiring-message">{inspiringMessage}</p>
+
+      <a class="back-link" href={returnUrl || 'chrome://newtab/'} onclick={goBack}>
+        {returnUrl ? 'Go back' : 'Open new tab'}
+      </a>
 
       {#if loadingOverride}
         <div class="override-card loading">Loading temporary unblock...</div>
@@ -323,6 +346,22 @@
     border-radius: 1rem;
     background: rgba(12, 26, 22, 0.42);
     backdrop-filter: blur(14px);
+  }
+
+  .back-link {
+    color: #f2d28f;
+    font-size: 1rem;
+    text-underline-offset: 0.25em;
+  }
+
+  .back-link:hover {
+    color: #fff;
+  }
+
+  .back-link:focus-visible {
+    outline: 2px solid #f2d28f;
+    outline-offset: 6px;
+    border-radius: 2px;
   }
 
   .override-card.loading {

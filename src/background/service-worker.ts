@@ -1,4 +1,4 @@
-import type { ContentScanResult, BlockEvent, EvaluationResult, Session } from '@/lib/types'
+import type { ContentScanResult, BlockEvent, EvaluationResult } from '@/lib/types'
 import { evaluateUrl, evaluateUrlOnly } from '@/lib/rules-engine'
 import { getActiveSession } from '@/lib/session-manager'
 import { getStats, incrementBlockCount, getGlobalMessage } from '@/lib/storage'
@@ -11,6 +11,54 @@ log('Service worker starting...')
 
 const pendingScans = new Map<number, { url: string }>()
 
+type TabNavigation = { url: string; previousUrl?: string; blocked?: boolean }
+const navigationTasks = new Map<number, Promise<unknown>>()
+
+// Session storage survives service-worker suspension without saving browsing history to disk.
+function withNavigation<T>(tabId: number, action: (key: string) => Promise<T>): Promise<T> {
+  const previous = navigationTasks.get(tabId) ?? Promise.resolve()
+  const task = previous.catch(() => {}).then(() => action(`navigation:${tabId}`))
+  navigationTasks.set(tabId, task)
+  void task.finally(() => {
+    if (navigationTasks.get(tabId) === task) navigationTasks.delete(tabId)
+  }).catch(() => {})
+  return task
+}
+
+async function recordNavigation(tabId: number, url: string): Promise<void> {
+  // Keep the original destination when the block page loads or reloads.
+  if (url.startsWith(chrome.runtime.getURL('src/blocked/index.html'))) return
+
+  await withNavigation(tabId, async key => {
+    const stored = await chrome.storage.session.get(key)
+    const previous = stored[key] as TabNavigation | undefined
+    if (previous?.url === url) return
+
+    const navigation: TabNavigation = {
+      url,
+      previousUrl: previous?.blocked ? previous.previousUrl : previous?.url
+    }
+    await chrome.storage.session.set({ [key]: navigation })
+  })
+}
+
+async function getReturnUrl(tabId: number): Promise<string | undefined> {
+  return withNavigation(tabId, async key => {
+    const stored = await chrome.storage.session.get(key)
+    const navigation = stored[key] as TabNavigation | undefined
+    if (!navigation) return undefined
+
+    await chrome.storage.session.set({ [key]: { ...navigation, blocked: true } })
+    const previousUrl = navigation.previousUrl
+    return previousUrl && /^https?:\/\//i.test(previousUrl) ? previousUrl : undefined
+  })
+}
+
+chrome.tabs.onRemoved.addListener(async tabId => {
+  pendingScans.delete(tabId)
+  await withNavigation(tabId, key => chrome.storage.session.remove(key))
+})
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
@@ -18,6 +66,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function redirectToBlockedPage(tabId: number, blockedPageUrl: string): Promise<void> {
+  const returnUrl = await getReturnUrl(tabId)
+  if (returnUrl) {
+    const destination = new URL(blockedPageUrl)
+    destination.searchParams.set('returnUrl', returnUrl)
+    blockedPageUrl = destination.href
+  }
+
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       await chrome.tabs.sendMessage(tabId, {
@@ -69,6 +124,8 @@ async function getBlockMessage(result: EvaluationResult): Promise<string> {
 }
 
 async function handleNavigation(tabId: number, url: string): Promise<void> {
+  await recordNavigation(tabId, url)
+
   if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:')) {
     return
   }
